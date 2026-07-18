@@ -318,8 +318,11 @@ impl Funchook {
     /// Returns the most recent native diagnostic for this handle.
     pub fn error_message(&self) -> &CStr {
         let ptr = unsafe { raw::funchook_error_message(self.raw.as_ptr()) };
-        debug_assert!(!ptr.is_null());
-        unsafe { CStr::from_ptr(ptr) }
+        if ptr.is_null() {
+            c""
+        } else {
+            unsafe { CStr::from_ptr(ptr) }
+        }
     }
 
     /// Borrows the underlying native handle.
@@ -472,7 +475,7 @@ impl ArgumentLocation<'_> {
     ///
     /// The slot must have enough writable storage and `T` must match the
     /// argument representation expected by the target ABI.
-    pub unsafe fn write<T>(&mut self, value: T) {
+    pub unsafe fn write<T: Copy>(&mut self, value: T) {
         core::ptr::write_unaligned(self.raw.as_ptr().cast::<T>(), value);
     }
 }

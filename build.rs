@@ -14,8 +14,8 @@ fn main() {
         _ => unsupported(&target),
     };
     match (os.as_str(), arch.as_str()) {
-        ("linux", "x86" | "x86_64" | "aarch64")
-        | ("macos", "x86_64" | "aarch64")
+        ("linux" | "android", "x86" | "x86_64" | "aarch64")
+        | ("macos" | "ios", "x86_64" | "aarch64")
         | ("windows", "x86" | "x86_64" | "aarch64") => {}
         _ => unsupported(&target),
     }
@@ -61,11 +61,11 @@ fn main() {
     println!("cargo:rustc-link-lib=static=funchook");
     println!("cargo:rustc-link-lib=static=capstone");
     match os.as_str() {
-        "linux" => {
+        "linux" | "android" => {
             println!("cargo:rustc-link-lib=dl");
             println!("cargo:rustc-link-lib=c");
         }
-        "macos" => println!("cargo:rustc-link-lib=c"),
+        "macos" | "ios" => println!("cargo:rustc-link-lib=c"),
         "windows" => println!("cargo:rustc-link-lib=psapi"),
         _ => unreachable!(),
     }
@@ -94,6 +94,6 @@ fn emit_link_search(path: &Path) {
 
 fn unsupported(target: &str) -> ! {
     panic!(
-        "funchook does not support target `{target}`; supported targets are Linux x86/x86_64/aarch64, macOS x86_64/aarch64, and Windows x86/x86_64/aarch64"
+        "funchook does not support target `{target}`; supported targets are Linux and Android x86/x86_64/aarch64, macOS and iOS x86_64/aarch64, and Windows x86/x86_64/aarch64"
     )
 }

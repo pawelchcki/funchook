@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 
 project(funchook VERSION 2.0.0 LANGUAGES C ASM)
 
