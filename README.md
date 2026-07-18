@@ -95,15 +95,16 @@ The replacement, target, and trampoline must have exactly compatible calling
 conventions and signatures. Callback pointers and user data must remain valid
 until uninstall completes, callbacks must not unwind across the C ABI, and the
 application must stop concurrent execution while executable code is installed
-or restored. The same restriction applies when dropping an installed handle.
+or restored. Installed hooks must be explicitly uninstalled to reclaim their
+native handle.
 
 Owning handles are neither `Send` nor `Sync`. Wrapper control operations are
 globally serialized to protect native global state. Calls through `raw` bypass
 that serialization and must provide it themselves.
 
-`Drop` attempts to uninstall and then destroy the native handle. If uninstall
-fails, it intentionally retains the native allocation so live patched targets
-cannot jump into freed trampolines.
+`Drop` destroys an uninstalled native handle. It intentionally retains an
+installed handle because implicit uninstallation cannot satisfy the executable
+code safety requirements and live patched targets must retain their trampolines.
 
 ## Build and linkage contract
 

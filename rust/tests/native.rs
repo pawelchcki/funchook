@@ -23,11 +23,11 @@ fn owning_handle_lifecycle() {
 mod runtime {
     use super::*;
     use core::ffi::c_void;
-    use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+    use core::sync::atomic::{AtomicI32, AtomicPtr, AtomicUsize, Ordering};
     use funchook::{PrehookInfo, PrepareParams};
 
     type Unary = extern "C" fn(i32) -> i32;
-    static mut UNARY_TRAMPOLINE: Option<Unary> = None;
+    static UNARY_TRAMPOLINE: AtomicPtr<c_void> = AtomicPtr::new(core::ptr::null_mut());
 
     #[inline(never)]
     extern "C" fn unary_target(value: i32) -> i32 {
@@ -36,7 +36,10 @@ mod runtime {
 
     #[inline(never)]
     extern "C" fn unary_hook(value: i32) -> i32 {
-        unsafe { UNARY_TRAMPOLINE.expect("trampoline was not initialized")(value) + 10 }
+        let trampoline = UNARY_TRAMPOLINE.load(Ordering::Relaxed);
+        assert!(!trampoline.is_null(), "trampoline was not initialized");
+        let trampoline = unsafe { core::mem::transmute::<*mut c_void, Unary>(trampoline) };
+        trampoline(value) + 10
     }
 
     #[test]
@@ -47,7 +50,7 @@ mod runtime {
             handle
                 .prepare(&mut trampoline, unary_hook as *const () as *mut c_void)
                 .unwrap();
-            UNARY_TRAMPOLINE = Some(core::mem::transmute::<*mut c_void, Unary>(trampoline));
+            UNARY_TRAMPOLINE.store(trampoline, Ordering::Relaxed);
             handle.install().unwrap();
         }
 

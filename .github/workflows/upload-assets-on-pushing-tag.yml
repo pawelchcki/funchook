@@ -30,6 +30,7 @@ jobs:
           TGZ_FILE_NAME="$DIR_NAME.tar.gz"
           ZIP_FILE_NAME="$DIR_NAME.zip"
           git clone --depth 1 --branch "$GITHUB_REF_NAME" --recursive . "$DIR_NAME"
+          find "$DIR_NAME" -type f -name .git -delete
           rm -rf "$DIR_NAME/.ci" "$DIR_NAME/.dockerignore" "$DIR_NAME/.git"
           tar -czf "$TGZ_FILE_NAME" "$DIR_NAME"
           zip -rq "$ZIP_FILE_NAME" "$DIR_NAME"

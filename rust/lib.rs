@@ -339,16 +339,13 @@ impl Funchook {
 
 impl Drop for Funchook {
     fn drop(&mut self) {
-        let _guard = ControlGuard::lock();
+        // Uninstalling patches executable memory and therefore cannot happen
+        // safely from an implicit destructor. Retain the native allocation so
+        // installed targets and their trampolines remain valid.
         if self.installed {
-            let code = unsafe { raw::funchook_uninstall(self.raw.as_ptr(), 0) };
-            if Error::from_code(code).is_some() {
-                // The patched code may still jump into this allocation. Leak
-                // it rather than invalidating live trampolines.
-                return;
-            }
-            self.installed = false;
+            return;
         }
+        let _guard = ControlGuard::lock();
         let _ = unsafe { raw::funchook_destroy(self.raw.as_ptr()) };
     }
 }

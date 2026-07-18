@@ -70,18 +70,7 @@ fn main() {
         _ => unreachable!(),
     }
 
-    for path in [
-        "CMakeLists.txt",
-        "include",
-        "src",
-        "vendor/capstone/CMakeLists.txt",
-        "vendor/capstone/include",
-        if cpu == "x86" {
-            "vendor/capstone/arch/X86"
-        } else {
-            "vendor/capstone/arch/AArch64"
-        },
-    ] {
+    for path in ["CMakeLists.txt", "include", "src", "vendor/capstone"] {
         println!("cargo:rerun-if-changed={path}");
     }
 }
