@@ -1,14 +1,22 @@
-name: tests
+name: Tests
 on:
   push:
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests_on_alpine:
     name: Tests on Alpine (x86_64)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
     - name: x86_64 tests on Alpine
@@ -16,54 +24,36 @@ jobs:
         docker build -f .ci/Dockerfile-alpine-test -t funchook-test .
         docker run --rm funchook-test
 
-  tests_on_intel_macos:
-    name: Tests on macOS (x86_64)
-    runs-on: macos-13
+  build_on_macos:
+    name: Build on macOS (arm64)
+    runs-on: macos-latest
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
-    - name: x86_64 tests on macOS
+    - name: arm64 build on macOS
       run: |
-        ./.ci/run-cmake-test.sh x86_64-darwin
-
-  tests_on_m1_macos:
-    name: Tests on macOS (M1)
-    continue-on-error: true
-    runs-on: macos-14
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: true
-    - name: arm64 tests on macOS
-      run: |
-        ./.ci/run-cmake-test.sh arm64-darwin
+        cmake -S . -B build-macos -DCMAKE_BUILD_TYPE=Release -DFUNCHOOK_DISASM=capstone
+        cmake --build build-macos --parallel
 
   tests_on_ubuntu_arm64:
     name: Tests on Ubuntu (aarch64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
-    - uses: uraimo/run-on-arch-action@v2
-      name: aarch64 tests on Ubuntu
-      id: run_tests
-      with:
-        arch: aarch64
-        distro: ubuntu20.04
-        githubToken: ${{ github.token }}
-        install: |
-          apt-get update -q -y
-          apt-get install -q -y cmake git g++
-        run: |
-          ./.ci/run-cmake-test.sh aarch64-linux
+    - name: aarch64 tests on Ubuntu
+      run: ./.ci/run-cmake-test.sh aarch64-linux
 
   tests_on_ubuntu_x86_64:
     name: Tests on Ubuntu (x86_64 and i686)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
     - name: Install packages
@@ -80,8 +70,9 @@ jobs:
   tests_on_windows:
     name: Tests on Windows (x64 and x86)
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
     - name: x64 tests on Windows
@@ -96,8 +87,9 @@ jobs:
   tests_on_wine:
     name: Tests on Wine (x64 and x86)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         submodules: true
     - name: Install packages
