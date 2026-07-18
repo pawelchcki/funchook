@@ -2,6 +2,7 @@
 name = "funchook"
 version = "2.0.0"
 edition = "2021"
+# `core::ffi` C aliases and `CStr` became available in Rust 1.64.
 rust-version = "1.64"
 description = "A no_std Rust interface to statically bundled funchook"
 readme = "README.md"

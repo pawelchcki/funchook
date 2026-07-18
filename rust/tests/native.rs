@@ -30,6 +30,12 @@ mod runtime {
     static mut UNARY_TRAMPOLINE: Option<Unary> = None;
 
     #[inline(never)]
+    fn opaque<T: Copy>(value: T) -> T {
+        // `black_box` was stabilized after the crate's Rust 1.64 MSRV.
+        unsafe { core::ptr::read_volatile(&value) }
+    }
+
+    #[inline(never)]
     extern "C" fn unary_target(value: i32) -> i32 {
         value + 1
     }
@@ -51,7 +57,7 @@ mod runtime {
             handle.install().unwrap();
         }
 
-        let call = std::hint::black_box(unary_target as Unary);
+        let call = opaque(unary_target as Unary);
         assert_eq!(call(5), 16);
         unsafe { handle.uninstall().unwrap() };
         assert_eq!(call(5), 6);
@@ -107,7 +113,7 @@ mod runtime {
             handle.install().unwrap();
         }
 
-        let call = std::hint::black_box(binary_target as extern "C" fn(i32, i32) -> i32);
+        let call = opaque(binary_target as extern "C" fn(i32, i32) -> i32);
         assert_eq!(call(6, 7), 42);
         assert_eq!(ARG0.load(Ordering::SeqCst), 6);
         assert_eq!(ARG1.load(Ordering::SeqCst), 7);
