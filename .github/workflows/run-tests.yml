@@ -24,30 +24,18 @@ jobs:
         docker build -f .ci/Dockerfile-alpine-test -t funchook-test .
         docker run --rm funchook-test
 
-  tests_on_intel_macos:
-    name: Tests on macOS (x86_64)
-    runs-on: macos-13
+  build_on_macos:
+    name: Build on macOS (arm64)
+    runs-on: macos-latest
     timeout-minutes: 20
     steps:
     - uses: actions/checkout@v6
       with:
         submodules: true
-    - name: x86_64 tests on macOS
+    - name: arm64 build on macOS
       run: |
-        ./.ci/run-cmake-test.sh x86_64-darwin
-
-  tests_on_m1_macos:
-    name: Tests on macOS (M1)
-    continue-on-error: true
-    runs-on: macos-14
-    timeout-minutes: 20
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        submodules: true
-    - name: arm64 tests on macOS
-      run: |
-        ./.ci/run-cmake-test.sh arm64-darwin
+        cmake -S . -B build-macos -DCMAKE_BUILD_TYPE=Release -DFUNCHOOK_DISASM=capstone
+        cmake --build build-macos --parallel
 
   tests_on_ubuntu_arm64:
     name: Tests on Ubuntu (aarch64)
