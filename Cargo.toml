@@ -1,0 +1,50 @@
+[package]
+name = "funchook"
+version = "2.0.0"
+edition = "2021"
+# Keep this aligned with DataDog/libdatadog and rust-toolchain.toml.
+rust-version = "1.87.0"
+description = "A no_std Rust interface to statically bundled funchook"
+readme = "README.md"
+license-file = "LICENSE"
+repository = "https://github.com/kubo/funchook"
+keywords = ["hook", "no-std", "ffi"]
+categories = ["external-ffi-bindings", "no-std"]
+include = [
+    "Cargo.toml",
+    "Cargo.lock",
+    "build.rs",
+    "CMakeLists.txt",
+    "LICENSE",
+    "README.md",
+    "include/funchook.h",
+    "src/**",
+    "rust/**",
+    "vendor/capstone/CMakeLists.txt",
+    "vendor/capstone/*.cmake",
+    "vendor/capstone/*.cmake.in",
+    "vendor/capstone/CPackConfig.txt",
+    "vendor/capstone/*.h",
+    "vendor/capstone/*.c",
+    "vendor/capstone/*.pc.in",
+    "vendor/capstone/LICENSE*.TXT",
+    "vendor/capstone/include/**",
+    "vendor/capstone/arch/**/*.h",
+    "vendor/capstone/arch/X86/**",
+    "vendor/capstone/arch/AArch64/**",
+    "!vendor/capstone/.git",
+]
+
+[lib]
+path = "rust/lib.rs"
+
+[[test]]
+name = "abi"
+path = "rust/tests/abi.rs"
+
+[[test]]
+name = "native"
+path = "rust/tests/native.rs"
+
+[build-dependencies]
+cmake = "=0.1.58"

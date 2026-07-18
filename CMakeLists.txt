@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 
 project(funchook VERSION 2.0.0 LANGUAGES C ASM)
 
@@ -18,13 +18,9 @@ if(NOT FUNCHOOK_CPU)
   endif ()
 endif ()
 
-if (FUNCHOOK_CPU MATCHES "arm64")
-  set(FUNCHOOK_DEFAULT_DISASM "capstone")
-  if (MSVC)
-    cmake_minimum_required(VERSION 3.26)
-  endif ()
-else ()
-  set(FUNCHOOK_DEFAULT_DISASM "distorm")
+set(FUNCHOOK_DEFAULT_DISASM "capstone")
+if ((FUNCHOOK_CPU MATCHES "arm64") AND MSVC)
+  cmake_minimum_required(VERSION 3.26)
 endif ()
 
 option(FUNCHOOK_BUILD_SHARED "build shared library" ON)
@@ -84,21 +80,29 @@ endif ()
 if (DISASM_CAPSTONE)
   FetchContent_Declare(
     capstone
-    GIT_REPOSITORY https://github.com/capstone-engine/capstone.git
-    GIT_TAG        5.0.9
-    GIT_SHALLOW    TRUE
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/capstone
   )
   string(TOUPPER ${FUNCHOOK_CPU} FUNCHOOK_CPU_UPPER)
-  set(CAPSTONE_BUILD_SHARED OFF CACHE BOOL "")
-  set(CAPSTONE_BUILD_STATIC_RUNTIME OFF CACHE BOOL "")
-  set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "")
-  set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "")
-  set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "")
-  set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON CACHE BOOL "")
-  FetchContent_MakeAvailable(capstone)
+
+  # Keep Capstone's generic options private so embedding projects can use
+  # BUILD_STATIC_LIBS independently while this required target always exists.
+  function(funchook_make_capstone_available)
+    set(BUILD_SHARED_LIBS OFF)
+    set(BUILD_STATIC_LIBS ON)
+    set(BUILD_STATIC_RUNTIME OFF)
+    set(CAPSTONE_BUILD_TESTS OFF)
+    set(CAPSTONE_BUILD_CSTOOL OFF)
+    set(CAPSTONE_BUILD_CSTEST OFF)
+    set(CAPSTONE_BUILD_MACOS_THIN ON)
+    set(CAPSTONE_ARCHITECTURE_DEFAULT OFF)
+    set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON)
+    unset(PROJECT_VERSION)
+    FetchContent_MakeAvailable(capstone)
+  endfunction()
+  funchook_make_capstone_available()
   set_target_properties(capstone PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-  list(APPEND FUNCHOOK_DEPS capstone)
+  list(APPEND FUNCHOOK_DEPS capstone_static)
   set(DISASM capstone)
 endif ()
 
