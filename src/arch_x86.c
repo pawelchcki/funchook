@@ -434,6 +434,13 @@ void *funchook_arg_get_int_reg_addr(const funchook_arg_handle_t *arg_handle, int
     return (void*)(arg_handle->base_pointer - 2 + pos);
 }
 
+void *funchook_arg_get_flt_reg_addr(const funchook_arg_handle_t *arg_handle, int pos)
+{
+    (void)arg_handle;
+    (void)pos;
+    return NULL;
+}
+
 void *funchook_arg_get_stack_addr(const funchook_arg_handle_t *arg_handle, int pos)
 {
     return (void*)(arg_handle->base_pointer + 2 + pos);

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.15)
 
 project(funchook VERSION 2.0.0 LANGUAGES C ASM)
 
@@ -18,13 +18,9 @@ if(NOT FUNCHOOK_CPU)
   endif ()
 endif ()
 
-if (FUNCHOOK_CPU MATCHES "arm64")
-  set(FUNCHOOK_DEFAULT_DISASM "capstone")
-  if (MSVC)
-    cmake_minimum_required(VERSION 3.26)
-  endif ()
-else ()
-  set(FUNCHOOK_DEFAULT_DISASM "distorm")
+set(FUNCHOOK_DEFAULT_DISASM "capstone")
+if ((FUNCHOOK_CPU MATCHES "arm64") AND MSVC)
+  cmake_minimum_required(VERSION 3.26)
 endif ()
 
 option(FUNCHOOK_BUILD_SHARED "build shared library" ON)
@@ -78,35 +74,28 @@ else ()
   set(FUNCHOOK_DEPS dl)
 endif ()
 
-function(add_subdirectory_pic source_dir binary_dir)
-  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-  add_subdirectory(${source_dir} ${binary_dir})
-endfunction(add_subdirectory_pic)
-
 #
 # capstone
 #
 if (DISASM_CAPSTONE)
   FetchContent_Declare(
     capstone
-    GIT_REPOSITORY https://github.com/capstone-engine/capstone.git
-    GIT_TAG        5.0.1
-    GIT_SHALLOW    TRUE
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/capstone
   )
-  FetchContent_GetProperties(capstone)
-  if(NOT capstone_POPULATED)
-    FetchContent_Populate(capstone)
-    string(TOUPPER ${FUNCHOOK_CPU} FUNCHOOK_CPU_UPPER)
-    set(CAPSTONE_BUILD_SHARED OFF CACHE BOOL "")
-    set(CAPSTONE_BUILD_STATIC_RUNTIME OFF CACHE BOOL "")
-    set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "")
-    set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "")
-    set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "")
-    set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON CACHE BOOL "")
-    add_subdirectory_pic(${capstone_SOURCE_DIR} ${capstone_BINARY_DIR})
-  endif()
+  string(TOUPPER ${FUNCHOOK_CPU} FUNCHOOK_CPU_UPPER)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "")
+  set(BUILD_STATIC_LIBS ON CACHE BOOL "")
+  set(BUILD_STATIC_RUNTIME OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_CSTEST OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_MACOS_THIN ON CACHE BOOL "")
+  set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "")
+  set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON CACHE BOOL "")
+  FetchContent_MakeAvailable(capstone)
+  set_target_properties(capstone PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-  list(APPEND FUNCHOOK_DEPS capstone)
+  list(APPEND FUNCHOOK_DEPS capstone_static)
   set(DISASM capstone)
 endif ()
 
@@ -119,23 +108,21 @@ if (DISASM_DISTORM)
     GIT_REPOSITORY https://github.com/gdabah/distorm.git
     GIT_TAG        3.5.2b
     GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  _funchook_no_cmake
   )
-  FetchContent_GetProperties(distorm)
-  if(NOT distorm_POPULATED)
-    FetchContent_Populate(distorm)
+  FetchContent_MakeAvailable(distorm)
 
-    file(GLOB distorm_SRC_FILES ${distorm_SOURCE_DIR}/src/*.c)
-    add_library(distorm STATIC ${distorm_SRC_FILES})
-    set_target_properties(distorm PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_include_directories(distorm PUBLIC ${distorm_SOURCE_DIR}/include)
-    if (HAVE_FVISIBILITY_HIDDEN)
-      target_compile_options(distorm PRIVATE -fvisibility=hidden)
-    endif ()
-    if (MSVC)
-      # workaround for https://github.com/gdabah/distorm/pull/179
-      set_source_files_properties(${distorm_SOURCE_DIR}/src/prefix.c PROPERTIES COMPILE_FLAGS /wd4819)
-    endif ()
-  endif()
+  file(GLOB distorm_SRC_FILES ${distorm_SOURCE_DIR}/src/*.c)
+  add_library(distorm STATIC ${distorm_SRC_FILES})
+  set_target_properties(distorm PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  target_include_directories(distorm PUBLIC ${distorm_SOURCE_DIR}/include)
+  if (HAVE_FVISIBILITY_HIDDEN)
+    target_compile_options(distorm PRIVATE -fvisibility=hidden)
+  endif ()
+  if (MSVC)
+    # workaround for https://github.com/gdabah/distorm/pull/179
+    set_source_files_properties(${distorm_SOURCE_DIR}/src/prefix.c PROPERTIES COMPILE_FLAGS /wd4819)
+  endif ()
 
   list(APPEND FUNCHOOK_DEPS distorm)
   set(DISASM distorm)
@@ -148,17 +135,14 @@ if (DISASM_ZYDIS)
   FetchContent_Declare(
     Zydis
     GIT_REPOSITORY https://github.com/zyantific/zydis.git
-    GIT_TAG        v4.1.0
+    GIT_TAG        v4.1.1
     GIT_SHALLOW    TRUE
   )
-  FetchContent_GetProperties(Zydis)
-  if(NOT zydis_POPULATED)
-    FetchContent_Populate(Zydis)
-    set(ZYDIS_BUILD_SHARED_LIB OFF CACHE BOOL "")
-    set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "")
-    set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "")
-    add_subdirectory_pic(${zydis_SOURCE_DIR} ${zydis_BINARY_DIR})
-  endif()
+  set(ZYDIS_BUILD_SHARED_LIB OFF CACHE BOOL "")
+  set(ZYDIS_BUILD_EXAMPLES OFF CACHE BOOL "")
+  set(ZYDIS_BUILD_TOOLS OFF CACHE BOOL "")
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  FetchContent_MakeAvailable(Zydis)
 
   list(APPEND FUNCHOOK_DEPS Zydis)
   set(DISASM Zydis)
