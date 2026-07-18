@@ -107,6 +107,9 @@ cannot jump into freed trampolines.
 
 ## Build and linkage contract
 
+Building requires Rust 1.87.0 or newer. The repository pins that toolchain in
+`rust-toolchain.toml`, so rustup installs and selects the MSRV automatically.
+
 The `cmake` crate is a pinned build-only dependency; build scripts may use
 `std`, but the library cannot. Offline builds require the Rust build
 dependencies to be present in Cargo's cache, while all C and assembly sources

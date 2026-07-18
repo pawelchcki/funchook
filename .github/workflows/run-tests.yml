@@ -11,6 +11,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rust_lints:
+    name: Rust formatting and Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v6
+    - run: cargo fmt --all -- --check
+    - run: cargo clippy --all-targets --locked -- -D warnings
+
   rust_tests:
     name: Rust (${{ matrix.os }})
     strategy:
@@ -21,15 +30,7 @@ jobs:
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
-    - uses: dtolnay/rust-toolchain@stable
-    - name: Test
-      if: runner.os != 'Windows'
-      run: cargo test --all-targets --locked
-    - name: Test on Windows with Ninja
-      if: runner.os == 'Windows'
-      env:
-        CMAKE_GENERATOR: Ninja
-      run: cargo test --all-targets --locked
+    - run: cargo test --all-targets --locked
     - name: Verify static native linkage
       if: matrix.os == 'ubuntu-latest'
       shell: bash
@@ -38,23 +39,12 @@ jobs:
         native_test=$(find target/debug/deps -type f -executable -name 'native-*' | head -1)
         ! ldd "$native_test" | grep -Eiq 'funchook|capstone'
 
-  rust_msrv:
-    name: Rust MSRV 1.64
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-    - uses: actions/checkout@v6
-    - uses: dtolnay/rust-toolchain@1.64.0
-    - name: Test with Rust 1.64
-      run: cargo +1.64.0 test --all-targets --locked
-
   rust_package_offline:
     name: Packaged crate (offline)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
-    - uses: dtolnay/rust-toolchain@stable
     - run: cargo fetch --locked
     - run: cargo package --locked
     - name: Build packaged archive offline

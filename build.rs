@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::Path;
 
 fn main() {
     let target = env::var("TARGET").expect("Cargo did not set TARGET");
@@ -86,7 +86,7 @@ fn main() {
     }
 }
 
-fn emit_link_search(path: &PathBuf) {
+fn emit_link_search(path: &Path) {
     if path.exists() {
         println!("cargo:rustc-link-search=native={}", path.display());
     }

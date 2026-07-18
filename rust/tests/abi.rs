@@ -17,8 +17,7 @@ fn public_structs_match_the_c_layout() {
     let pointer_fields = 3 * size_of::<*mut c_void>();
     let unpadded_size = pointer_fields + size_of::<c_uint>();
     let pointer_alignment = align_of::<*mut c_void>();
-    let expected_size =
-        ((unpadded_size + pointer_alignment - 1) / pointer_alignment) * pointer_alignment;
+    let expected_size = unpadded_size.div_ceil(pointer_alignment) * pointer_alignment;
     assert_eq!(size_of::<raw::funchook_params_t>(), expected_size);
     assert_eq!(align_of::<raw::funchook_params_t>(), pointer_alignment);
 }

@@ -2,8 +2,8 @@
 name = "funchook"
 version = "2.0.0"
 edition = "2021"
-# `core::ffi` C aliases and `CStr` became available in Rust 1.64.
-rust-version = "1.64"
+# Keep this aligned with DataDog/libdatadog and rust-toolchain.toml.
+rust-version = "1.87.0"
 description = "A no_std Rust interface to statically bundled funchook"
 readme = "README.md"
 license-file = "LICENSE"
@@ -46,4 +46,4 @@ name = "native"
 path = "rust/tests/native.rs"
 
 [build-dependencies]
-cmake = "=0.1.54"
+cmake = "=0.1.58"
