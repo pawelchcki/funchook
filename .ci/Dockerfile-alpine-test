@@ -1,4 +1,4 @@
-FROM alpine
-RUN apk add musl-dev gcc g++ make cmake git
+FROM alpine:3.22
+RUN apk add --no-cache musl-dev gcc g++ make cmake git
 COPY . /funchook
 ENTRYPOINT ["/funchook/.ci/run-cmake-test.sh", "alpine"]
