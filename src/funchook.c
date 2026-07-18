@@ -208,7 +208,7 @@ void *funchook_hook_caller(size_t transit_addr, const size_t *base_pointer)
         .arg_handle = &arg_handle,
     };
     entry->prehook(&info);
-    return entry->hook_func ? entry->hook_func : entry->trampoline;
+    return info.hook_func ? info.hook_func : entry->trampoline;
 }
 
 static void funchook_logv(funchook_t *funchook, int set_error, const char *fmt, va_list ap)

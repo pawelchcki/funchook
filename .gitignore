@@ -4,5 +4,6 @@
 *.o
 *.so
 *~
-/build*
-
+/build*/
+/target/
+**/*.rs.bk

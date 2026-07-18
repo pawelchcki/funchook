@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.15)
 
 project(funchook VERSION 2.0.0 LANGUAGES C ASM)
 
@@ -18,13 +18,9 @@ if(NOT FUNCHOOK_CPU)
   endif ()
 endif ()
 
-if (FUNCHOOK_CPU MATCHES "arm64")
-  set(FUNCHOOK_DEFAULT_DISASM "capstone")
-  if (MSVC)
-    cmake_minimum_required(VERSION 3.26)
-  endif ()
-else ()
-  set(FUNCHOOK_DEFAULT_DISASM "distorm")
+set(FUNCHOOK_DEFAULT_DISASM "capstone")
+if ((FUNCHOOK_CPU MATCHES "arm64") AND MSVC)
+  cmake_minimum_required(VERSION 3.26)
 endif ()
 
 option(FUNCHOOK_BUILD_SHARED "build shared library" ON)
@@ -84,21 +80,26 @@ endif ()
 if (DISASM_CAPSTONE)
   FetchContent_Declare(
     capstone
-    GIT_REPOSITORY https://github.com/capstone-engine/capstone.git
-    GIT_TAG        5.0.9
-    GIT_SHALLOW    TRUE
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/capstone
   )
   string(TOUPPER ${FUNCHOOK_CPU} FUNCHOOK_CPU_UPPER)
-  set(CAPSTONE_BUILD_SHARED OFF CACHE BOOL "")
-  set(CAPSTONE_BUILD_STATIC_RUNTIME OFF CACHE BOOL "")
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "")
+  set(BUILD_STATIC_LIBS ON CACHE BOOL "")
+  set(BUILD_STATIC_RUNTIME OFF CACHE BOOL "")
   set(CAPSTONE_BUILD_TESTS OFF CACHE BOOL "")
   set(CAPSTONE_BUILD_CSTOOL OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_CSTEST OFF CACHE BOOL "")
+  set(CAPSTONE_BUILD_MACOS_THIN ON CACHE BOOL "")
   set(CAPSTONE_ARCHITECTURE_DEFAULT OFF CACHE BOOL "")
   set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON CACHE BOOL "")
+  set(_FUNCHOOK_PROJECT_VERSION "${PROJECT_VERSION}")
+  unset(PROJECT_VERSION)
   FetchContent_MakeAvailable(capstone)
+  set(PROJECT_VERSION "${_FUNCHOOK_PROJECT_VERSION}")
+  unset(_FUNCHOOK_PROJECT_VERSION)
   set_target_properties(capstone PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-  list(APPEND FUNCHOOK_DEPS capstone)
+  list(APPEND FUNCHOOK_DEPS capstone_static)
   set(DISASM capstone)
 endif ()
 
