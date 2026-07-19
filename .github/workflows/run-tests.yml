@@ -27,14 +27,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+        - os: ubuntu-latest
+          cargo_features: ""
+        - os: macos-latest
+          cargo_features: --features libc
+        - os: windows-latest
+          cargo_features: --features libc
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v6
       with:
         submodules: recursive
-    - run: cargo test --all-targets --locked
+    - run: cargo test --all-targets --locked ${{ matrix.cargo_features }}
     - name: Verify static native linkage
       if: matrix.os == 'ubuntu-latest'
       shell: bash
