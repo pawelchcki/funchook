@@ -38,6 +38,13 @@ include = [
 [lib]
 path = "rust/lib.rs"
 
+[features]
+default = []
+# Use the platform C runtime and the original hosted OS implementation.
+libc = []
+# Resolve ELF import stubs when loader symbols are available in the process.
+dlsym = []
+
 [[test]]
 name = "abi"
 path = "rust/tests/abi.rs"
@@ -45,6 +52,10 @@ path = "rust/tests/abi.rs"
 [[test]]
 name = "native"
 path = "rust/tests/native.rs"
+
+[[test]]
+name = "allocator"
+path = "rust/tests/allocator.rs"
 
 [build-dependencies]
 cmake = "=0.1.58"

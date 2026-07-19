@@ -32,6 +32,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#ifndef FUNCHOOK_USE_LIBC
+#include "compat.h"
+#endif
 #include "funchook_internal.h"
 #include "disasm.h"
 
@@ -58,6 +61,18 @@ int funchook_disasm_init(funchook_disasm_t *disasm, funchook_t *funchook, const 
 {
     cs_err err;
 
+#ifndef FUNCHOOK_USE_LIBC
+    cs_opt_mem memory;
+    memory.malloc = funchook_rust_alloc;
+    memory.calloc = funchook_rust_calloc;
+    memory.realloc = funchook_rust_realloc;
+    memory.free = funchook_rust_free;
+    memory.vsnprintf = funchook_vsnprintf;
+    if ((err = cs_option(0, CS_OPT_MEM, (size_t)&memory)) != 0) {
+        funchook_set_error_message(funchook, "cs_option memory error: %d", err);
+        return FUNCHOOK_ERROR_INTERNAL_ERROR;
+    }
+#endif
     disasm->funchook = funchook;
     disasm->index = 0;
     if ((err = cs_open(CS_ARCH, CS_MODE, &disasm->handle)) != 0) {

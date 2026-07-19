@@ -47,6 +47,11 @@
 #endif
 #include "funchook_internal.h"
 
+#if defined(__GLIBC__) && defined(FUNCHOOK_USE_DLSYM)
+extern struct r_debug _r_debug __attribute__((weak));
+extern void *dlsym(void *handle, const char *name) __attribute__((weak));
+#endif
+
 #if !defined(MAP_ANONYMOUS) && defined(MAP_ANON)
 #define MAP_ANONYMOUS MAP_ANON
 #endif
@@ -401,7 +406,7 @@ int funchook_unprotect_end(funchook_t *funchook, const mem_state_t *mstate)
 
 void *funchook_resolve_func(funchook_t *funchook, void *func)
 {
-#ifdef __GLIBC__
+#if defined(__GLIBC__) && defined(FUNCHOOK_USE_DLSYM)
     struct link_map *lmap, *lm;
     const ElfW(Ehdr) *ehdr;
     const ElfW(Dyn) *dyn;
@@ -411,6 +416,9 @@ void *funchook_resolve_func(funchook_t *funchook, void *func)
     size_t strtab_size = 0;
     int i;
 
+    if (&_r_debug == NULL || dlsym == NULL) {
+        return func;
+    }
     lmap = NULL;
     for (lm = _r_debug.r_map; lm != NULL; lm = lm->l_next) {
         if ((void*)lm->l_addr <= func) {

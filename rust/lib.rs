@@ -1,6 +1,7 @@
 //! A `no_std` interface to the statically bundled funchook library.
 //!
-//! The target-side Rust API uses only [`core`]. The build script compiles
+//! The target-side Rust API uses [`core`], while the libc-free native allocator
+//! callbacks use [`alloc`]. The build script compiles
 //! funchook and Capstone 5.0.9 from the sources included in this crate, so no
 //! system funchook or Capstone installation is used.
 //!
@@ -10,11 +11,135 @@
 
 #![no_std]
 
+extern crate alloc;
+
+#[cfg(not(feature = "libc"))]
+use alloc::alloc::{alloc, alloc_zeroed, dealloc, realloc, Layout};
 use core::ffi::{c_int, c_void, CStr};
 use core::hint::spin_loop;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(not(feature = "libc"))]
+const NATIVE_ALLOC_ALIGN: usize = 16;
+
+#[cfg(not(feature = "libc"))]
+#[repr(C, align(16))]
+struct NativeAllocHeader {
+    allocation_size: usize,
+}
+
+#[cfg(not(feature = "libc"))]
+const NATIVE_ALLOC_HEADER_SIZE: usize = core::mem::size_of::<NativeAllocHeader>();
+
+#[cfg(not(feature = "libc"))]
+fn native_layout(payload_size: usize) -> Option<Layout> {
+    let allocation_size = NATIVE_ALLOC_HEADER_SIZE.checked_add(payload_size.max(1))?;
+    Layout::from_size_align(allocation_size, NATIVE_ALLOC_ALIGN).ok()
+}
+
+/// Allocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// The returned allocation must be released only with
+/// [`funchook_rust_free`] or [`funchook_rust_realloc`].
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_alloc(size: usize) -> *mut c_void {
+    let Some(layout) = native_layout(size) else {
+        return core::ptr::null_mut();
+    };
+    let base = alloc(layout);
+    if base.is_null() {
+        return core::ptr::null_mut();
+    }
+    base.cast::<NativeAllocHeader>().write(NativeAllocHeader {
+        allocation_size: layout.size(),
+    });
+    base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+}
+
+/// Zeroing allocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// The returned allocation must be released only with
+/// [`funchook_rust_free`] or [`funchook_rust_realloc`].
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_calloc(count: usize, size: usize) -> *mut c_void {
+    let Some(payload_size) = count.checked_mul(size) else {
+        return core::ptr::null_mut();
+    };
+    let Some(layout) = native_layout(payload_size) else {
+        return core::ptr::null_mut();
+    };
+    let base = alloc_zeroed(layout);
+    if base.is_null() {
+        return core::ptr::null_mut();
+    }
+    base.cast::<NativeAllocHeader>().write(NativeAllocHeader {
+        allocation_size: layout.size(),
+    });
+    base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+}
+
+/// Reallocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// `ptr` must be null or an allocation returned by these callbacks that has
+/// not already been freed. A successful call invalidates `ptr`.
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    if ptr.is_null() {
+        return funchook_rust_alloc(size);
+    }
+    if size == 0 {
+        funchook_rust_free(ptr);
+        return core::ptr::null_mut();
+    }
+    let Some(new_layout) = native_layout(size) else {
+        return core::ptr::null_mut();
+    };
+    let base = ptr.cast::<u8>().sub(NATIVE_ALLOC_HEADER_SIZE);
+    let old_size = base.cast::<NativeAllocHeader>().read().allocation_size;
+    let Ok(old_layout) = Layout::from_size_align(old_size, NATIVE_ALLOC_ALIGN) else {
+        return core::ptr::null_mut();
+    };
+    let new_base = realloc(base, old_layout, new_layout.size());
+    if new_base.is_null() {
+        return core::ptr::null_mut();
+    }
+    new_base
+        .cast::<NativeAllocHeader>()
+        .write(NativeAllocHeader {
+            allocation_size: new_layout.size(),
+        });
+    new_base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+}
+
+/// Deallocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// `ptr` must be null or an allocation returned by these callbacks that has
+/// not already been freed.
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_free(ptr: *mut c_void) {
+    if ptr.is_null() {
+        return;
+    }
+    let base = ptr.cast::<u8>().sub(NATIVE_ALLOC_HEADER_SIZE);
+    let allocation_size = base.cast::<NativeAllocHeader>().read().allocation_size;
+    if let Ok(layout) = Layout::from_size_align(allocation_size, NATIVE_ALLOC_ALIGN) {
+        dealloc(base, layout);
+    }
+}
 
 /// Raw declarations matching `include/funchook.h`.
 pub mod raw {

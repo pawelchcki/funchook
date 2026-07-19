@@ -2,21 +2,39 @@
 
 `funchook` intercepts native function calls and provides both raw bindings and
 an owning Rust interface. The target-side crate is Rust 2021, uses `#![no_std]`
-and `core` only, and has no normal Rust dependencies.
+with `alloc`, and has no normal Rust dependencies.
 
 Funchook and Capstone 5.0.9 are compiled from the sources packaged with the
 crate and bundled statically into the Rust `rlib`. A system funchook or
-Capstone installation is never used. The platform C runtime and system
-libraries remain external.
+Capstone installation is never used. On Linux, the default build uses the
+program's Rust global allocator and raw system calls, and does not link libc or
+libdl.
 
 Supported targets are:
 
 - Linux x86, x86_64, and aarch64, including glibc and musl toolchains
-- macOS x86_64 and aarch64
-- Windows x86, x86_64, and aarch64 with GNU or MSVC toolchains
+- Android x86, x86_64, and aarch64 with `libc`
+- macOS and iOS x86_64 and aarch64 with `libc`
+- Windows x86, x86_64, and aarch64 with GNU or MSVC toolchains and `libc`
 
 macOS aarch64 builds and links, but retains the native project's documented
 runtime executable-memory limitation.
+
+## Features
+
+Cargo features are independent and disabled by default:
+
+| Features | Native runtime |
+|---|---|
+| none | Linux-only, libc-free, direct function addresses |
+| `dlsym` | libc-free plus opportunistic weak ELF loader resolution |
+| `libc` | CRT-backed implementation on every supported platform |
+| `libc,dlsym` | CRT-backed implementation with loader resolution |
+
+Non-Linux targets require `libc`. The libc-free Linux build requires
+`/proc/self/auxv` and `/proc/self/maps`, and the final program must provide a
+Rust global allocator. The `dlsym` feature never forces a libdl dependency; it
+uses weak loader symbols only when the host supplies them.
 
 ## Basic hook and trampoline
 
@@ -116,9 +134,9 @@ The `cmake` crate is a pinned build-only dependency; build scripts may use
 dependencies to be present in Cargo's cache, while all C and assembly sources
 needed for funchook and the x86/aarch64 Capstone backends are in the crate.
 
-Only system runtime libraries are dynamically linked: libc/libdl on Unix where
-required and Win32/PSAPI on Windows. The final program does not load funchook or
-Capstone dynamically.
+With `libc`, system runtime libraries are dynamically linked where required,
+along with Win32/PSAPI on Windows. Standalone CMake builds keep this hosted mode
+by default. The final program does not load funchook or Capstone dynamically.
 
 Funchook is distributed under GPL-2.0 with its independent-module linking
 exception; see `LICENSE`. Vendored Capstone is BSD-licensed; see

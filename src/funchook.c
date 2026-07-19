@@ -35,18 +35,23 @@
 #define _CRT_NONSTDC_NO_WARNINGS
 #endif
 #include "config.h"
+#ifdef FUNCHOOK_USE_LIBC
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#endif
 #include <stdarg.h>
 #include <stddef.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 #include <limits.h>
 #ifdef _WIN32
 #include <windows.h>
 #ifndef PATH_MAX
 #define PATH_MAX MAX_PATH
 #endif
+#endif
+#ifndef FUNCHOOK_USE_LIBC
+#include "compat.h"
 #endif
 #include "funchook.h"
 #include "funchook_internal.h"
@@ -58,16 +63,24 @@ struct funchook {
     int installed;
     funchook_page_t *page_list;
     char error_message[FUNCHOOK_MAX_ERROR_MESSAGE_LEN];
+#ifdef FUNCHOOK_USE_LIBC
     FILE *fp;
+#endif
 };
 
+#ifdef FUNCHOOK_USE_LIBC
 char funchook_debug_file[PATH_MAX];
+#else
+char funchook_debug_file[1];
+#endif
 
 const size_t funchook_size = sizeof(funchook_t);
 
 static size_t num_entries_in_page;
 
+#ifdef FUNCHOOK_USE_LIBC
 static void funchook_logv(funchook_t *funchook, int set_error, const char *fmt, va_list ap);
+#endif
 static void funchook_log_end(funchook_t *funchook, const char *fmt, ...);
 static funchook_t *funchook_create_internal(void);
 static int funchook_prepare_internal(funchook_t *funchook, void **target_func,
@@ -80,7 +93,30 @@ static int get_page(funchook_t *funchook, funchook_page_t **page_out, uint8_t *a
 
 static void flush_instruction_cache(void *addr, size_t size)
 {
-#if defined __GNUC__
+#if !defined(FUNCHOOK_USE_LIBC) && defined(CPU_ARM64)
+    size_t ctr;
+    size_t data_line_size;
+    size_t instruction_line_size;
+    size_t start = (size_t)addr;
+    size_t end = start + size;
+    size_t cursor;
+
+    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
+    data_line_size = 4u << ((ctr >> 16) & 15);
+    instruction_line_size = 4u << (ctr & 15);
+    for (cursor = ROUND_DOWN(start, data_line_size); cursor < end; cursor += data_line_size) {
+        __asm__ volatile("dc cvau, %0" : : "r"(cursor) : "memory");
+    }
+    __asm__ volatile("dsb ish" : : : "memory");
+    for (cursor = ROUND_DOWN(start, instruction_line_size); cursor < end; cursor += instruction_line_size) {
+        __asm__ volatile("ic ivau, %0" : : "r"(cursor) : "memory");
+    }
+    __asm__ volatile("dsb ish\n\tisb" : : : "memory");
+#elif !defined(FUNCHOOK_USE_LIBC) && (defined(CPU_X86) || defined(CPU_X86_64))
+    (void)addr;
+    (void)size;
+    __asm__ volatile("" : : : "memory");
+#elif defined __GNUC__
     __builtin___clear_cache((char*)addr, (char*)addr + size);
 #elif defined _WIN32
     FlushInstructionCache(GetCurrentProcess(), addr, size);
@@ -103,7 +139,12 @@ int funchook_prepare(funchook_t *funchook, void **target_func, void *hook_func)
 {
     int rv;
     void *orig_func;
-    funchook_params_t params = { .hook_func = hook_func, };
+    funchook_params_t params;
+
+    params.hook_func = hook_func;
+    params.prehook = NULL;
+    params.user_data = NULL;
+    params.flags = 0;
 
     funchook_log(funchook, "Enter funchook_prepare(%p, %p, %p)\n", funchook, target_func, hook_func);
     orig_func = *target_func;
@@ -163,21 +204,30 @@ const char *funchook_error_message(const funchook_t *funchook)
 
 int funchook_set_debug_file(const char *name)
 {
+#ifdef FUNCHOOK_USE_LIBC
     if (name != NULL) {
         strncpy(funchook_debug_file, name, sizeof(funchook_debug_file) - 1);
         funchook_debug_file[sizeof(funchook_debug_file) - 1] = '\0';
     } else {
         funchook_debug_file[0] = '\0';
     }
+#else
+    (void)name;
+#endif
     return 0;
 }
 
 void funchook_log(funchook_t *funchook, const char *fmt, ...)
 {
+#ifdef FUNCHOOK_USE_LIBC
     va_list ap;
     va_start(ap, fmt);
     funchook_logv(funchook, 0, fmt, ap);
     va_end(ap);
+#else
+    (void)funchook;
+    (void)fmt;
+#endif
 }
 
 void funchook_set_error_message(funchook_t *funchook, const char *fmt, ...)
@@ -185,10 +235,14 @@ void funchook_set_error_message(funchook_t *funchook, const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
+#ifdef FUNCHOOK_USE_LIBC
     vsnprintf(funchook->error_message, FUNCHOOK_MAX_ERROR_MESSAGE_LEN, fmt, ap);
     va_end(ap);
     va_start(ap, fmt);
     funchook_logv(funchook, 1, fmt, ap);
+#else
+    funchook_vsnprintf(funchook->error_message, FUNCHOOK_MAX_ERROR_MESSAGE_LEN, fmt, ap);
+#endif
     va_end(ap);
 }
 
@@ -211,6 +265,7 @@ void *funchook_hook_caller(size_t transit_addr, const size_t *base_pointer)
     return info.hook_func ? info.hook_func : entry->trampoline;
 }
 
+#ifdef FUNCHOOK_USE_LIBC
 static void funchook_logv(funchook_t *funchook, int set_error, const char *fmt, va_list ap)
 {
     FILE *fp;
@@ -242,7 +297,6 @@ static void funchook_logv(funchook_t *funchook, int set_error, const char *fmt, 
         fflush(fp);
     }
 }
-
 static void funchook_log_end(funchook_t *funchook, const char *fmt, ...)
 {
     va_list ap;
@@ -254,6 +308,13 @@ static void funchook_log_end(funchook_t *funchook, const char *fmt, ...)
         funchook->fp = NULL;
     }
 }
+#else
+static void funchook_log_end(funchook_t *funchook, const char *fmt, ...)
+{
+    (void)funchook;
+    (void)fmt;
+}
+#endif
 
 static funchook_t *funchook_create_internal(void)
 {
@@ -462,9 +523,11 @@ static int funchook_destroy_internal(funchook_t *funchook)
         page_next = page->next;
         funchook_page_free(funchook, page);
     }
+#ifdef FUNCHOOK_USE_LIBC
     if (funchook->fp != NULL) {
         fclose(funchook->fp);
     }
+#endif
     funchook_free(funchook);
     return 0;
 }
