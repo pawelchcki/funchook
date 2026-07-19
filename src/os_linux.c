@@ -63,7 +63,7 @@ static long linux_syscall6(long number, long a1, long a2, long a3,
     __asm__ volatile("svc 0"
                      : "+r"(x0)
                      : "r"(x1), "r"(x2), "r"(x3), "r"(x4), "r"(x5), "r"(x8)
-                     : "memory");
+                     : "x16", "x17", "cc", "memory");
     return x0;
 }
 
@@ -430,6 +430,7 @@ void *funchook_resolve_func(funchook_t *funchook, void *func)
             (header->e_type != ET_EXEC && header->e_type != ET_DYN)) return func;
     }
     dynamic = selected->l_ld;
+    if (dynamic == NULL) return func;
     for (i = 0; dynamic[i].d_tag != DT_NULL; i++) {
         if (dynamic[i].d_tag == DT_SYMTAB) symbols = (const ElfW(Sym) *)dynamic[i].d_un.d_ptr;
         else if (dynamic[i].d_tag == DT_STRTAB) strings = (const char *)dynamic[i].d_un.d_ptr;
@@ -440,9 +441,9 @@ void *funchook_resolve_func(funchook_t *funchook, void *func)
     while (symbols < symbols_end) {
         if (symbols->st_name >= strings_size) break;
         if (ELF64_ST_TYPE(symbols->st_info) == STT_FUNC && symbols->st_size == 0 &&
-            (void *)symbols->st_value == func) {
-            void *resolved = dlsym((void *)0, strings + symbols->st_name);
-            if (resolved == func) resolved = dlsym((void *)-1, strings + symbols->st_name);
+            (void *)(selected->l_addr + symbols->st_value) == func) {
+            void *resolved = dlsym(RTLD_DEFAULT, strings + symbols->st_name);
+            if (resolved == func) resolved = dlsym(RTLD_NEXT, strings + symbols->st_name);
             if (resolved != NULL) func = resolved;
             break;
         }
