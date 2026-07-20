@@ -141,3 +141,9 @@ by default. The final program does not load funchook or Capstone dynamically.
 Funchook is distributed under GPL-2.0 with its independent-module linking
 exception; see `LICENSE`. Vendored Capstone is BSD-licensed; see
 `vendor/capstone/LICENSE.TXT`.
+
+## Examples
+
+[`examples/bash_execve_logger`](examples/bash_execve_logger) is a Linux
+`no_std`, libc-free `LD_PRELOAD` library that uses the Rust API to instrument
+Bash `execve` calls and append their paths to a log file.

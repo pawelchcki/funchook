@@ -41,6 +41,9 @@ jobs:
       with:
         submodules: recursive
     - run: cargo test --all-targets --locked ${{ matrix.cargo_features }}
+    - name: Test portable no_std Bash execve logger
+      if: matrix.os == 'ubuntu-latest'
+      run: ./examples/bash_execve_logger/test-portability.sh
     - name: Verify static native linkage
       if: matrix.os == 'ubuntu-latest'
       shell: bash
