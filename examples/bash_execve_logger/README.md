@@ -10,6 +10,11 @@ and logging use raw system calls; the resulting shared object has no libc or
 other dynamic dependency. A single x86_64 build runs unchanged on musl and
 glibc systems, including CentOS 6 with glibc 2.12.
 
+The build also defines linker-local aliases for compiler-generated `memcpy`,
+`memmove`, `memset`, and `strncpy` libcalls. They resolve to funchook's hidden
+freestanding implementations and are not exposed as interposable `LD_PRELOAD`
+symbols.
+
 Build and run it with:
 
 ```sh
