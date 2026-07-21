@@ -11,6 +11,7 @@
 
 #![no_std]
 
+#[cfg(not(feature = "libc"))]
 extern crate alloc;
 
 #[cfg(not(feature = "libc"))]

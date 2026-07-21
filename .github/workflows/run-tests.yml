@@ -23,7 +23,7 @@ jobs:
     - run: cargo clippy --all-targets --locked -- -D warnings
     - run: cargo clippy --all-targets --all-features --locked -- -D warnings
     - run: cargo fmt --manifest-path examples/bash_execve_logger/Cargo.toml -- --check
-    - run: rustfmt --edition 2021 --check rust/no_std_smoke.rs
+    - run: rustfmt --edition 2021 --check rust/no_std_smoke.rs rust/no_alloc_smoke.rs
 
   rust_tests:
     name: Rust (${{ matrix.os }}, ${{ matrix.configuration }})

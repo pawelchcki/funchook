@@ -43,6 +43,12 @@ unsafe impl GlobalAlloc for SysAllocator {
             lateout("r11") _,
         );
     }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        // Fresh anonymous mappings are zero-filled by the kernel. Overriding
+        // the default also avoids emitting a libc `memset` call.
+        self.alloc(layout)
+    }
 }
 
 #[global_allocator]

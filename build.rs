@@ -49,7 +49,9 @@ fn main() {
         .define("CAPSTONE_BUILD_CSTOOL", "OFF")
         .define("CAPSTONE_BUILD_CSTEST", "OFF")
         .define("CAPSTONE_BUILD_MACOS_THIN", "ON")
-        .define("CAPSTONE_BUILD_DIET", if use_libc { "OFF" } else { "ON" })
+        // Funchook uses Capstone's instruction-group metadata when relocating
+        // relative branches, and diet mode does not populate that metadata.
+        .define("CAPSTONE_BUILD_DIET", "OFF")
         .define(
             "CAPSTONE_USE_DEFAULT_ALLOC",
             if use_libc { "ON" } else { "OFF" },
