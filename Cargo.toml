@@ -8,6 +8,7 @@ description = "A no_std Rust interface to statically bundled funchook"
 readme = "README.md"
 license-file = "LICENSE"
 repository = "https://github.com/kubo/funchook"
+links = "funchook"
 keywords = ["hook", "no-std", "ffi"]
 categories = ["external-ffi-bindings", "no-std"]
 include = [
@@ -59,3 +60,6 @@ path = "rust/tests/allocator.rs"
 
 [build-dependencies]
 cmake = "=0.1.58"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

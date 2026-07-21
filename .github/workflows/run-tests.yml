@@ -21,19 +21,34 @@ jobs:
         submodules: recursive
     - run: cargo fmt --all -- --check
     - run: cargo clippy --all-targets --locked -- -D warnings
+    - run: cargo clippy --all-targets --all-features --locked -- -D warnings
+    - run: cargo fmt --manifest-path examples/bash_execve_logger/Cargo.toml -- --check
+    - run: rustfmt --edition 2021 --check rust/no_std_smoke.rs
 
   rust_tests:
-    name: Rust (${{ matrix.os }})
+    name: Rust (${{ matrix.os }}, ${{ matrix.configuration }})
     strategy:
       fail-fast: false
       matrix:
         include:
         - os: ubuntu-latest
+          configuration: libc-free
           cargo_features: ""
+        - os: ubuntu-latest
+          configuration: libc-free + dlsym
+          cargo_features: --features dlsym
+        - os: ubuntu-latest
+          configuration: libc
+          cargo_features: --features libc
+        - os: ubuntu-latest
+          configuration: all features
+          cargo_features: --all-features
         - os: macos-latest
-          cargo_features: --features libc
+          configuration: all features
+          cargo_features: --all-features
         - os: windows-latest
-          cargo_features: --features libc
+          configuration: all features
+          cargo_features: --all-features
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -41,11 +56,14 @@ jobs:
       with:
         submodules: recursive
     - run: cargo test --all-targets --locked ${{ matrix.cargo_features }}
+    - name: Test freestanding no_std linkage
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'libc-free'
+      run: ./rust/test_no_std_link.sh
     - name: Test portable no_std Bash execve logger
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'libc-free'
       run: ./examples/bash_execve_logger/test-portability.sh
     - name: Verify static native linkage
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'libc-free'
       shell: bash
       run: |
         test "$(cargo tree --locked --edges normal --depth 1 | wc -l)" -eq 1
@@ -68,6 +86,7 @@ jobs:
         mkdir package-test
         tar -xzf target/package/funchook-*.crate -C package-test
         cargo build --manifest-path package-test/funchook-*/Cargo.toml --offline --locked
+        cargo build --manifest-path package-test/funchook-*/Cargo.toml --offline --locked --all-features
 
   tests_on_alpine:
     name: Tests on Alpine (x86_64)
