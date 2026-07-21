@@ -27,9 +27,30 @@ option(FUNCHOOK_BUILD_SHARED "build shared library" ON)
 option(FUNCHOOK_BUILD_STATIC "build static library" ON)
 option(FUNCHOOK_BUILD_TESTS "Build tests" ON)
 option(FUNCHOOK_INSTALL "Install Funchook" ON)
+option(FUNCHOOK_USE_LIBC "Use the platform C runtime" ON)
+option(FUNCHOOK_USE_DLSYM "Resolve ELF import stubs with dlsym" ON)
 set(FUNCHOOK_DISASM ${FUNCHOOK_DEFAULT_DISASM} CACHE STRING "disassembler engine")
 
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if (NOT FUNCHOOK_USE_LIBC AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  message(FATAL_ERROR "FUNCHOOK_USE_LIBC=OFF is supported only on Linux")
+endif ()
+
+set(FUNCHOOK_FREESTANDING_DEFINITIONS
+  NDEBUG
+  memcpy=funchook_memcpy
+  memmove=funchook_memmove
+  memset=funchook_memset
+  memcmp=funchook_memcmp
+  strlen=funchook_strlen
+  strcmp=funchook_strcmp
+  strcpy=funchook_strcpy
+  strncpy=funchook_strncpy
+  strcat=funchook_strcat
+  snprintf=funchook_snprintf
+  printf=funchook_printf)
+set(FUNCHOOK_FREESTANDING_OPTIONS -ffreestanding -fno-builtin -fno-stack-protector)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND FUNCHOOK_USE_LIBC)
   set(_GNU_SOURCE 1)
   include(CheckCSourceCompiles)
   # musl libc doesn't provide the GNU-specific version of strerror_r
@@ -69,9 +90,15 @@ endif ()
 if (WIN32)
   set(FUNCHOOK_OS windows)
   set(FUNCHOOK_DEPS psapi)
+elseif (NOT FUNCHOOK_USE_LIBC)
+  set(FUNCHOOK_OS linux)
+  set(FUNCHOOK_DEPS)
 else ()
   set(FUNCHOOK_OS unix)
-  set(FUNCHOOK_DEPS dl)
+  set(FUNCHOOK_DEPS)
+  if (FUNCHOOK_USE_DLSYM)
+    list(APPEND FUNCHOOK_DEPS dl)
+  endif ()
 endif ()
 
 #
@@ -94,6 +121,11 @@ if (DISASM_CAPSTONE)
     set(CAPSTONE_BUILD_CSTOOL OFF)
     set(CAPSTONE_BUILD_CSTEST OFF)
     set(CAPSTONE_BUILD_MACOS_THIN ON)
+    # Funchook requires instruction-group metadata, which diet mode omits.
+    set(CAPSTONE_BUILD_DIET OFF)
+    if (NOT FUNCHOOK_USE_LIBC)
+      set(CAPSTONE_USE_DEFAULT_ALLOC OFF)
+    endif ()
     set(CAPSTONE_ARCHITECTURE_DEFAULT OFF)
     set(CAPSTONE_${FUNCHOOK_CPU_UPPER}_SUPPORT ON)
     unset(PROJECT_VERSION)
@@ -101,6 +133,11 @@ if (DISASM_CAPSTONE)
   endfunction()
   funchook_make_capstone_available()
   set_target_properties(capstone PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+  if (NOT FUNCHOOK_USE_LIBC)
+    target_compile_definitions(capstone PRIVATE ${FUNCHOOK_FREESTANDING_DEFINITIONS})
+    target_compile_options(capstone PRIVATE -O2 ${FUNCHOOK_FREESTANDING_OPTIONS})
+  endif ()
 
   list(APPEND FUNCHOOK_DEPS capstone_static)
   set(DISASM capstone)
@@ -160,6 +197,9 @@ endif ()
 #
 
 set(FUNCHOOK_SOURCES src/funchook.c src/arch_${FUNCHOOK_CPU}.c src/os_${FUNCHOOK_OS}.c src/disasm_${DISASM}.c)
+if (NOT FUNCHOOK_USE_LIBC)
+  list(APPEND FUNCHOOK_SOURCES src/compat.c)
+endif ()
 
 if ((FUNCHOOK_CPU STREQUAL x86) AND (CMAKE_SIZEOF_VOID_P EQUAL "8"))
   if (MSVC)
@@ -215,6 +255,10 @@ function (add_funchook_library target_name target_type)
   endif ()
   if (CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(${target_name} PRIVATE -Wall)
+  endif ()
+  if (NOT FUNCHOOK_USE_LIBC)
+    target_compile_definitions(${target_name} PRIVATE ${FUNCHOOK_FREESTANDING_DEFINITIONS})
+    target_compile_options(${target_name} PRIVATE ${FUNCHOOK_FREESTANDING_OPTIONS})
   endif ()
 endfunction ()
 

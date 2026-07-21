@@ -8,6 +8,7 @@ description = "A no_std Rust interface to statically bundled funchook"
 readme = "README.md"
 license-file = "LICENSE"
 repository = "https://github.com/kubo/funchook"
+links = "funchook"
 keywords = ["hook", "no-std", "ffi"]
 categories = ["external-ffi-bindings", "no-std"]
 include = [
@@ -38,6 +39,13 @@ include = [
 [lib]
 path = "rust/lib.rs"
 
+[features]
+default = []
+# Use the platform C runtime and the original hosted OS implementation.
+libc = []
+# Resolve ELF import stubs when loader symbols are available in the process.
+dlsym = []
+
 [[test]]
 name = "abi"
 path = "rust/tests/abi.rs"
@@ -46,5 +54,12 @@ path = "rust/tests/abi.rs"
 name = "native"
 path = "rust/tests/native.rs"
 
+[[test]]
+name = "allocator"
+path = "rust/tests/allocator.rs"
+
 [build-dependencies]
 cmake = "=0.1.58"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

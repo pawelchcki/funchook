@@ -1,6 +1,7 @@
 //! A `no_std` interface to the statically bundled funchook library.
 //!
-//! The target-side Rust API uses only [`core`]. The build script compiles
+//! The target-side Rust API uses [`core`], while the libc-free native allocator
+//! callbacks use [`alloc`]. The build script compiles
 //! funchook and Capstone 5.0.9 from the sources included in this crate, so no
 //! system funchook or Capstone installation is used.
 //!
@@ -10,11 +11,142 @@
 
 #![no_std]
 
+#[cfg(not(feature = "libc"))]
+extern crate alloc;
+
+#[cfg(not(feature = "libc"))]
+use alloc::alloc::{alloc, alloc_zeroed, dealloc, realloc, Layout};
 use core::ffi::{c_int, c_void, CStr};
 use core::hint::spin_loop;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(not(feature = "libc"))]
+const NATIVE_ALLOC_ALIGN: usize = 16;
+
+#[cfg(not(feature = "libc"))]
+#[repr(C, align(16))]
+struct NativeAllocHeader {
+    allocation_size: usize,
+}
+
+#[cfg(not(feature = "libc"))]
+const NATIVE_ALLOC_HEADER_SIZE: usize = core::mem::size_of::<NativeAllocHeader>();
+
+#[cfg(not(feature = "libc"))]
+fn native_layout(payload_size: usize) -> Option<Layout> {
+    let allocation_size = NATIVE_ALLOC_HEADER_SIZE.checked_add(payload_size.max(1))?;
+    Layout::from_size_align(allocation_size, NATIVE_ALLOC_ALIGN).ok()
+}
+
+/// Allocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// The returned allocation must be released only with
+/// [`funchook_rust_free`] or [`funchook_rust_realloc`].
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_alloc(size: usize) -> *mut c_void {
+    let Some(layout) = native_layout(size) else {
+        return core::ptr::null_mut();
+    };
+    let base = unsafe { alloc(layout) };
+    if base.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        base.cast::<NativeAllocHeader>().write(NativeAllocHeader {
+            allocation_size: layout.size(),
+        });
+        base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+    }
+}
+
+/// Zeroing allocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// The returned allocation must be released only with
+/// [`funchook_rust_free`] or [`funchook_rust_realloc`].
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_calloc(count: usize, size: usize) -> *mut c_void {
+    let Some(payload_size) = count.checked_mul(size) else {
+        return core::ptr::null_mut();
+    };
+    let Some(layout) = native_layout(payload_size) else {
+        return core::ptr::null_mut();
+    };
+    let base = unsafe { alloc_zeroed(layout) };
+    if base.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        base.cast::<NativeAllocHeader>().write(NativeAllocHeader {
+            allocation_size: layout.size(),
+        });
+        base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+    }
+}
+
+/// Reallocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// `ptr` must be null or an allocation returned by these callbacks that has
+/// not already been freed. A successful call invalidates `ptr`.
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_realloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    if ptr.is_null() {
+        return unsafe { funchook_rust_alloc(size) };
+    }
+    if size == 0 {
+        unsafe { funchook_rust_free(ptr) };
+        return core::ptr::null_mut();
+    }
+    let Some(new_layout) = native_layout(size) else {
+        return core::ptr::null_mut();
+    };
+    let base = unsafe { ptr.cast::<u8>().sub(NATIVE_ALLOC_HEADER_SIZE) };
+    let old_size = unsafe { base.cast::<NativeAllocHeader>().read().allocation_size };
+    let Ok(old_layout) = Layout::from_size_align(old_size, NATIVE_ALLOC_ALIGN) else {
+        return core::ptr::null_mut();
+    };
+    let new_base = unsafe { realloc(base, old_layout, new_layout.size()) };
+    if new_base.is_null() {
+        return core::ptr::null_mut();
+    }
+    unsafe {
+        new_base
+            .cast::<NativeAllocHeader>()
+            .write(NativeAllocHeader {
+                allocation_size: new_layout.size(),
+            });
+        new_base.add(NATIVE_ALLOC_HEADER_SIZE).cast()
+    }
+}
+
+/// Deallocator callback used by the libc-free native libraries.
+///
+/// # Safety
+///
+/// `ptr` must be null or an allocation returned by these callbacks that has
+/// not already been freed.
+#[cfg(not(feature = "libc"))]
+#[no_mangle]
+pub unsafe extern "C" fn funchook_rust_free(ptr: *mut c_void) {
+    if ptr.is_null() {
+        return;
+    }
+    let base = unsafe { ptr.cast::<u8>().sub(NATIVE_ALLOC_HEADER_SIZE) };
+    let allocation_size = unsafe { base.cast::<NativeAllocHeader>().read().allocation_size };
+    if let Ok(layout) = Layout::from_size_align(allocation_size, NATIVE_ALLOC_ALIGN) {
+        unsafe { dealloc(base, layout) };
+    }
+}
 
 /// Raw declarations matching `include/funchook.h`.
 pub mod raw {
@@ -261,11 +393,7 @@ impl Funchook {
         hook_func: *mut c_void,
     ) -> Result<(), Error> {
         let _guard = ControlGuard::lock();
-        result(raw::funchook_prepare(
-            self.raw.as_ptr(),
-            target_func,
-            hook_func,
-        ))
+        result(unsafe { raw::funchook_prepare(self.raw.as_ptr(), target_func, hook_func) })
     }
 
     /// Prepares a hook with a prehook and user data.
@@ -281,11 +409,9 @@ impl Funchook {
         params: &PrepareParams,
     ) -> Result<(), Error> {
         let _guard = ControlGuard::lock();
-        result(raw::funchook_prepare_with_params(
-            self.raw.as_ptr(),
-            target_func,
-            params.as_raw(),
-        ))
+        result(unsafe {
+            raw::funchook_prepare_with_params(self.raw.as_ptr(), target_func, params.as_raw())
+        })
     }
 
     /// Installs every hook prepared on this handle.
@@ -296,7 +422,7 @@ impl Funchook {
     /// while installation changes executable memory.
     pub unsafe fn install(&mut self) -> Result<(), Error> {
         let _guard = ControlGuard::lock();
-        result(raw::funchook_install(self.raw.as_ptr(), 0))?;
+        result(unsafe { raw::funchook_install(self.raw.as_ptr(), 0) })?;
         self.installed = true;
         Ok(())
     }
@@ -310,7 +436,7 @@ impl Funchook {
     /// this method returns.
     pub unsafe fn uninstall(&mut self) -> Result<(), Error> {
         let _guard = ControlGuard::lock();
-        result(raw::funchook_uninstall(self.raw.as_ptr(), 0))?;
+        result(unsafe { raw::funchook_uninstall(self.raw.as_ptr(), 0) })?;
         self.installed = false;
         Ok(())
     }
@@ -363,7 +489,7 @@ impl<'a> PrehookInfo<'a> {
     /// `raw` must be the non-aliased pointer supplied to the current prehook
     /// invocation and must remain valid for `'a`.
     pub unsafe fn from_raw(raw: *mut raw::funchook_info_t) -> Option<Self> {
-        raw.as_mut().map(|raw| Self { raw })
+        unsafe { raw.as_mut() }.map(|raw| Self { raw })
     }
 
     pub fn original_target(&self) -> *mut c_void {
@@ -399,7 +525,7 @@ impl<'a> PrehookInfo<'a> {
     /// The pointer must be aligned, valid, uniquely borrowed, and point to an
     /// initialized `T` for the returned lifetime.
     pub unsafe fn user_data_mut<T>(&mut self) -> Option<&mut T> {
-        (self.raw.user_data as *mut T).as_mut()
+        unsafe { (self.raw.user_data as *mut T).as_mut() }
     }
 
     pub fn arguments(&mut self) -> Option<Arguments<'_>> {
@@ -463,7 +589,7 @@ impl ArgumentLocation<'_> {
     /// The slot must contain enough initialized bytes and their bit pattern
     /// must be valid for `T` under the platform ABI.
     pub unsafe fn read<T: Copy>(&self) -> T {
-        core::ptr::read_unaligned(self.raw.as_ptr().cast::<T>())
+        unsafe { core::ptr::read_unaligned(self.raw.as_ptr().cast::<T>()) }
     }
 
     /// Writes a value into this slot without assuming alignment.
@@ -473,7 +599,7 @@ impl ArgumentLocation<'_> {
     /// The slot must have enough writable storage and `T` must match the
     /// argument representation expected by the target ABI.
     pub unsafe fn write<T: Copy>(&mut self, value: T) {
-        core::ptr::write_unaligned(self.raw.as_ptr().cast::<T>(), value);
+        unsafe { core::ptr::write_unaligned(self.raw.as_ptr().cast::<T>(), value) };
     }
 }
 

@@ -75,19 +75,19 @@ mod runtime {
     }
 
     unsafe extern "C" fn route_prehook(raw_info: *mut raw::funchook_info_t) {
-        let mut info = PrehookInfo::from_raw(raw_info).expect("null prehook info");
+        let mut info = unsafe { PrehookInfo::from_raw(raw_info) }.expect("null prehook info");
         USER_DATA.store(info.user_data() as usize, Ordering::SeqCst);
         let mut arguments = info.arguments().expect("null argument handle");
 
         #[cfg(target_arch = "x86")]
         let (a, b) = (
-            arguments.stack(0).unwrap().read::<i32>(),
-            arguments.stack(1).unwrap().read::<i32>(),
+            unsafe { arguments.stack(0).unwrap().read::<i32>() },
+            unsafe { arguments.stack(1).unwrap().read::<i32>() },
         );
         #[cfg(not(target_arch = "x86"))]
         let (a, b) = (
-            arguments.integer_register(0).unwrap().read::<i32>(),
-            arguments.integer_register(1).unwrap().read::<i32>(),
+            unsafe { arguments.integer_register(0).unwrap().read::<i32>() },
+            unsafe { arguments.integer_register(1).unwrap().read::<i32>() },
         );
 
         ARG0.store(a, Ordering::SeqCst);
